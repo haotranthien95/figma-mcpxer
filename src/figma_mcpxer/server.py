@@ -1,14 +1,20 @@
 """MCP server with Streamable HTTP transport (MCP spec 2025-03-26).
 
 Remote MCP clients (Claude Code, Claude Desktop, Cursor, custom agents) connect to:
-  POST /mcp           — single MCP endpoint (initialize, tool calls, notifications)
-  GET  /health        — liveness probe used by Docker and load balancers
+  POST /mcp            — single MCP endpoint (initialize, tool calls, notifications)
+  GET  /health         — liveness probe used by Docker and load balancers
   POST /webhooks/figma — receive Figma FILE_UPDATE events (Phase 8)
   GET  /metrics        — Prometheus text metrics (Phase 9)
 
 The legacy SSE transport (/sse + /messages/) has been replaced by the
 Streamable HTTP transport which uses a single POST endpoint and supports
 both streaming SSE responses and plain JSON responses.
+
+Architecture note: /mcp is routed by a top-level ASGI dispatcher (_MCPRouter)
+that calls StreamableHTTPSessionManager directly, bypassing Starlette's Route
+machinery.  This avoids the double-response error that occurs when Starlette
+tries to send the return value of a handler that has already called send().
+All other paths go through the Starlette app (with middleware).
 """
 
 from __future__ import annotations
@@ -32,7 +38,7 @@ from starlette.routing import Route
 from figma_mcpxer import metrics  # noqa: F401 — registers Prometheus metrics on import
 from figma_mcpxer.cache.store import CacheStore
 from figma_mcpxer.config import Settings
-from figma_mcpxer.exceptions import FigmaAPIError, MCPAuthError, ToolInputError
+from figma_mcpxer.exceptions import FigmaAPIError, ToolInputError
 from figma_mcpxer.figma.client import FigmaClient
 from figma_mcpxer.middleware.logging import RequestLoggingMiddleware, setup_json_logging
 from figma_mcpxer.middleware.rate_limit import RateLimitMiddleware
@@ -87,11 +93,59 @@ def _build_mcp_server(
     return mcp
 
 
-def create_app(settings: Settings) -> Starlette:
-    """Build the Starlette ASGI application.
+class _MCPRouter:
+    """Top-level ASGI dispatcher.
 
-    Owns the FigmaClient and CacheStore lifetimes — they are created once
-    at startup and closed at shutdown.
+    Routes /mcp (and /mcp/) directly to StreamableHTTPSessionManager, bypassing
+    Starlette's route handling entirely.  All other paths delegate to the
+    Starlette sub-application (which carries the middleware stack).
+
+    Why not use Starlette Mount("/mcp")?
+      Mount redirects bare /mcp → /mcp/ (307), and the sub-app's handle_request
+      already sends the HTTP response via ASGI send(), so the Route return value
+      causes a second http.response.start — RuntimeError.
+    """
+
+    def __init__(
+        self,
+        session_manager: StreamableHTTPSessionManager,
+        starlette_app: Starlette,
+        auth_token: str | None,
+    ) -> None:
+        self._manager = session_manager
+        self._app = starlette_app
+        self._auth_token = auth_token
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope.get("path", "").rstrip("/") == "/mcp":
+            await self._handle_mcp(scope, receive, send)
+        else:
+            await self._app(scope, receive, send)
+
+    async def _handle_mcp(self, scope: Any, receive: Any, send: Any) -> None:
+        if self._auth_token:
+            headers = dict(scope.get("headers", []))
+            auth = headers.get(b"authorization", b"").decode()
+            if auth != f"Bearer {self._auth_token}":
+                body = b'{"error": "unauthorized"}'
+                await send({
+                    "type": "http.response.start",
+                    "status": 401,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode()),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self._manager.handle_request(scope, receive, send)
+
+
+def create_app(settings: Settings) -> Any:
+    """Build the ASGI application.
+
+    Returns an _MCPRouter that routes /mcp to StreamableHTTPSessionManager
+    and all other paths to a Starlette app with middleware.
     """
     if settings.log_format == "json":
         setup_json_logging(settings.log_level)
@@ -115,20 +169,8 @@ def create_app(settings: Settings) -> Starlette:
                 logger.info("figma-mcpxer stopped")
 
     # ------------------------------------------------------------------ #
-    # Route handlers                                                        #
+    # Starlette routes (non-MCP)                                           #
     # ------------------------------------------------------------------ #
-
-    async def handle_mcp(request: Request) -> Response:
-        """Single MCP endpoint — handles initialize, tool calls, notifications."""
-        if settings.mcp_auth_token:
-            auth = request.headers.get("authorization", "")
-            if auth != f"Bearer {settings.mcp_auth_token}":
-                raise MCPAuthError()
-
-        await session_manager.handle_request(
-            request.scope, request.receive, request._send  # type: ignore[attr-defined]
-        )
-        return Response()  # response already sent via send
 
     async def health(_: Request) -> JSONResponse:
         tools = registry.get_all_tools()
@@ -163,22 +205,21 @@ def create_app(settings: Settings) -> Starlette:
         )
 
     # ------------------------------------------------------------------ #
-    # App assembly with middleware                                          #
+    # App assembly                                                          #
     # ------------------------------------------------------------------ #
 
-    app = Starlette(
+    starlette_app = Starlette(
         debug=settings.debug,
         lifespan=lifespan,
         routes=[
             Route("/health", health),
-            Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE"]),
             Route("/webhooks/figma", handle_figma_webhook, methods=["POST"]),
             Route("/metrics", prometheus_metrics),
         ],
     )
 
-    app.add_middleware(RequestLoggingMiddleware)
+    starlette_app.add_middleware(RequestLoggingMiddleware)
     if settings.rate_limit_rps > 0:
-        app.add_middleware(RateLimitMiddleware, max_rps=settings.rate_limit_rps)
+        starlette_app.add_middleware(RateLimitMiddleware, max_rps=settings.rate_limit_rps)
 
-    return app
+    return _MCPRouter(session_manager, starlette_app, settings.mcp_auth_token)
