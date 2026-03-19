@@ -22,6 +22,18 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     redis_url: str | None = None  # enables Redis cache when set
 
+    # Phase 8 — Webhooks
+    # Passcode that Figma must include in each webhook delivery.
+    # Set this when registering the webhook via figma_create_webhook.
+    figma_webhook_passcode: str | None = None
+
+    # Phase 9 — Rate limiting
+    # Maximum requests per second per client IP. 0 = disabled.
+    rate_limit_rps: int = 60
+
+    # Phase 9 — Logging format: "json" for structured production logs, "text" for dev
+    log_format: str = "text"
+
     # App
     debug: bool = False
     log_level: str = "INFO"

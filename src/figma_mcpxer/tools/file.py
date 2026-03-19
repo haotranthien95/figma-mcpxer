@@ -35,11 +35,11 @@ async def _fetch_file(
     depth: int | None = None,
 ) -> dict[str, Any]:
     cache_key = f"file:{file_key}:depth:{depth}"
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached is not None:
         return cached  # type: ignore[return-value]
     data = await client.get_file(file_key, depth=depth)
-    cache.set(cache_key, data)
+    await cache.set(cache_key, data)
     return data  # type: ignore[return-value]
 
 
@@ -250,10 +250,10 @@ async def _handle_get_node(
     node_id = normalize_node_id(arguments["node_id"])
 
     cache_key = f"nodes:{file_key}:{node_id}"
-    raw = cache.get(cache_key)
+    raw = await cache.get(cache_key)
     if raw is None:
         raw = await client.get_file_nodes(file_key, [node_id])
-        cache.set(cache_key, raw)
+        await cache.set(cache_key, raw)
 
     response = FigmaFileNodes.model_validate(raw)
     node_data = response.nodes.get(node_id)
@@ -311,10 +311,10 @@ async def _handle_get_nodes(
     node_ids = [normalize_node_id(nid) for nid in raw_ids]
     cache_key = f"nodes:{file_key}:{','.join(sorted(node_ids))}"
 
-    raw = cache.get(cache_key)
+    raw = await cache.get(cache_key)
     if raw is None:
         raw = await client.get_file_nodes(file_key, node_ids)
-        cache.set(cache_key, raw)
+        await cache.set(cache_key, raw)
 
     response = FigmaFileNodes.model_validate(raw)
     nodes_out = {

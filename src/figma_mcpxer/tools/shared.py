@@ -21,11 +21,11 @@ async def fetch_file_cached(
 ) -> dict[str, Any]:
     """Fetch a Figma file, using the cache when available."""
     cache_key = f"file:{file_key}:depth:{depth}"
-    cached = cache.get(cache_key)
+    cached = await cache.get(cache_key)
     if cached is not None:
         return cached  # type: ignore[return-value]
     data = await client.get_file(file_key, depth=depth)
-    cache.set(cache_key, data)
+    await cache.set(cache_key, data)
     return data  # type: ignore[return-value]
 
 
@@ -45,10 +45,10 @@ async def batch_fetch_nodes(
     for i in range(0, len(node_ids), batch_size):
         batch = node_ids[i : i + batch_size]
         cache_key = f"nodes:{file_key}:{','.join(sorted(batch))}"
-        batch_data: dict[str, Any] | None = cache.get(cache_key)
+        batch_data: dict[str, Any] | None = await cache.get(cache_key)
         if batch_data is None:
             batch_data = await client.get_file_nodes(file_key, batch)
-            cache.set(cache_key, batch_data)
+            await cache.set(cache_key, batch_data)
         all_nodes.update(batch_data.get("nodes", {}))
     return all_nodes
 

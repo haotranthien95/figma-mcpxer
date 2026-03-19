@@ -329,10 +329,10 @@ async def _handle_get_images(
 ) -> list[types.TextContent]:
     file_key = extract_file_key(arguments["file_key"])
     cache_key = f"image_fills:{file_key}"
-    raw: dict[str, Any] | None = cache.get(cache_key)
+    raw: dict[str, Any] | None = await cache.get(cache_key)
     if raw is None:
         raw = await client.get_file_image_fills(file_key)
-        cache.set(cache_key, raw)
+        await cache.set(cache_key, raw)
 
     images = raw.get("meta", {}).get("images", {})
     return _text({

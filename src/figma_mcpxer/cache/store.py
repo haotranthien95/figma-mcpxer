@@ -1,3 +1,9 @@
+"""In-memory TTL cache for Figma API responses.
+
+For production with multiple replicas, swap in RedisCacheStore from
+cache/redis_store.py by setting REDIS_URL in the environment.
+"""
+
 from __future__ import annotations
 
 import time
@@ -5,17 +11,18 @@ from typing import Any
 
 
 class CacheStore:
-    """In-memory TTL cache for Figma API responses.
+    """Async-compatible in-memory TTL cache.
 
-    Thread-safe for async (single-threaded event loop) use.
-    Replace with a Redis-backed implementation for Phase 9 production hardening.
+    Uses async interface so callers are identical whether using memory or Redis.
+    All operations are instant (no I/O) — async here is a no-op but keeps
+    the interface consistent with RedisCacheStore.
     """
 
     def __init__(self, ttl_seconds: int = 300) -> None:
         self._ttl = ttl_seconds
         self._store: dict[str, tuple[Any, float]] = {}
 
-    def get(self, key: str) -> Any | None:
+    async def get(self, key: str) -> Any | None:
         """Return cached value or None if missing/expired."""
         entry = self._store.get(key)
         if entry is None:
@@ -26,15 +33,15 @@ class CacheStore:
             return None
         return value
 
-    def set(self, key: str, value: Any) -> None:
+    async def set(self, key: str, value: Any) -> None:
         """Store a value with the configured TTL."""
         self._store[key] = (value, time.monotonic() + self._ttl)
 
-    def delete(self, key: str) -> None:
+    async def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         self._store.clear()
 
-    def size(self) -> int:
+    async def size(self) -> int:
         return len(self._store)

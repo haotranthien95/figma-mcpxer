@@ -1,6 +1,9 @@
 services:
   figma-mcp:
-    build: .
+    image: figma-mcpxer:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "${MCP_PORT:-8000}:8000"
     env_file:
@@ -8,13 +11,13 @@ services:
     environment:
       - MCP_HOST=0.0.0.0
       - MCP_PORT=8000
+      - LOG_FORMAT=json
       - LOG_LEVEL=INFO
       - DEBUG=false
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 512M
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test:
         [
@@ -23,12 +26,44 @@ services:
           "-c",
           "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')",
         ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
     restart: always
+    networks:
+      - figma_mcpxer_net
+
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 192M
+    restart: always
+    networks:
+      - figma_mcpxer_net
+
+volumes:
+  redis_data:
 
 networks:
-  default:
+  figma_mcpxer_net:
     name: figma_mcpxer_prod_network

@@ -64,25 +64,24 @@ Progress is tracked here. Mark `[x]` when a feature is complete and tested.
 - [x] `figma_describe_component` — structured description of a component: slots, variants, required props, design intent
 - [x] `figma_get_design_tokens_json` — full design token export in W3C Design Token format
 
-### Phase 7 — Collaboration & Metadata Tools
-- [ ] `figma_get_comments` — all comments on a file or node
-- [ ] `figma_post_comment` — post a comment on a node
-- [ ] `figma_get_versions` — file version history
-- [ ] `figma_get_team_components` — list components published from a team library
-- [ ] `figma_get_projects` — list projects for a team
+### Phase 7 — Collaboration & Metadata Tools ✅
+- [x] `figma_get_comments` — all comments on a file or node
+- [x] `figma_post_comment` — post a comment on a node
+- [x] `figma_get_versions` — file version history
+- [x] `figma_get_team_components` — list components published from a team library
+- [x] `figma_get_projects` — list projects for a team
 
-### Phase 8 — Webhooks & Real-time (advanced)
-- [ ] Figma webhook receiver for `FILE_UPDATE` events
-- [ ] Invalidate and re-fetch cached data on webhook trigger
-- [ ] Push update notification to connected SSE clients
+### Phase 8 — Webhooks & Real-time ✅
+- [x] Figma webhook receiver for `FILE_UPDATE` events (`POST /webhooks/figma`)
+- [x] Invalidate and re-fetch cached data on webhook trigger
+- [x] `figma_create_webhook` / `figma_list_webhooks` / `figma_delete_webhook` management tools
 
-### Phase 9 — Production Hardening
-- [ ] Response caching layer (Redis or in-memory TTL cache) to reduce Figma API rate-limit exposure
-- [ ] Rate limiter on incoming MCP requests
-- [ ] Structured JSON logging with request IDs
-- [ ] Prometheus metrics endpoint (`/metrics`) — request count, latency, cache hit rate
-- [ ] Docker image published to registry with version tags
-- [ ] `docker-compose.prod.yml` with resource limits and restart policies
+### Phase 9 — Production Hardening ✅
+- [x] Response caching layer (Redis or in-memory TTL cache) to reduce Figma API rate-limit exposure
+- [x] Rate limiter on incoming MCP requests (`RATE_LIMIT_RPS`)
+- [x] Structured JSON logging with request IDs (`LOG_FORMAT=json`)
+- [x] Prometheus metrics endpoint (`/metrics`) — tool call count, latency, HTTP requests
+- [x] `docker-compose.prod.yml` with Redis service, resource limits, and restart policies
 
 ---
 
@@ -90,16 +89,23 @@ Progress is tracked here. Mark `[x]` when a feature is complete and tested.
 
 ```
 src/figma_mcpxer/
-├── server.py          # FastAPI app + MCP SSE/HTTP transport mount
+├── server.py          # Starlette ASGI app — MCP SSE/HTTP + webhook + metrics endpoints
 ├── config.py          # pydantic-settings: all env vars loaded here
 ├── exceptions.py      # Custom exception hierarchy
-├── tools/             # One file per tool group (file.py, tokens.py, components.py, ...)
+├── metrics.py         # Prometheus counters and histograms (Phase 9)
+├── tools/             # One file per tool group (file.py, tokens.py, …, collaboration.py, webhooks.py)
 │   └── registry.py    # Imports all tools and registers them with the MCP server
 ├── figma/
 │   ├── client.py      # Single async httpx client — only place that calls Figma REST API
 │   └── models.py      # Pydantic v2 models for every Figma API response shape
 ├── cache/
-│   └── store.py       # TTL cache abstraction (memory for dev, Redis for prod)
+│   ├── store.py       # In-memory async TTL cache (default dev/single-instance)
+│   └── redis_store.py # Redis-backed async cache (enabled via REDIS_URL)
+├── webhooks/
+│   └── handler.py     # Parse + validate Figma webhook events; invalidate cache (Phase 8)
+├── middleware/
+│   ├── logging.py     # Structured JSON request logging with request_id (Phase 9)
+│   └── rate_limit.py  # In-memory sliding-window rate limiter per client IP (Phase 9)
 └── utils/
     ├── url.py         # Figma URL parsing (fileKey, nodeId extraction)
     ├── css.py         # Figma → CSS property converters
@@ -213,8 +219,13 @@ pytest --cov=src --cov-report=term-missing
 | `FIGMA_API_BASE_URL` | No | `https://api.figma.com/v1` | Override for testing/proxies |
 | `MCP_HOST` | No | `0.0.0.0` | Host the SSE server binds to |
 | `MCP_PORT` | No | `8000` | Port the SSE server listens on |
+| `MCP_AUTH_TOKEN` | No | — | If set, clients must send `Authorization: Bearer <token>` |
 | `CACHE_TTL_SECONDS` | No | `300` | TTL for cached Figma responses |
-| `REDIS_URL` | No | — | If set, use Redis for caching; otherwise in-memory |
+| `REDIS_URL` | No | — | If set, use Redis for caching (requires `pip install figma-mcpxer[redis]`) |
+| `FIGMA_WEBHOOK_PASSCODE` | No | — | Secret verified on incoming webhook deliveries |
+| `RATE_LIMIT_RPS` | No | `60` | Max requests/second per client IP (0 = disabled) |
+| `LOG_FORMAT` | No | `text` | `json` for structured production logs |
+| `LOG_LEVEL` | No | `INFO` | Logging level |
 | `FIGMA_TEST_FILE_KEY` | Integration tests only | — | Figma file key used in integration test suite |
 
 Copy `.env.example` to `.env` before running locally.

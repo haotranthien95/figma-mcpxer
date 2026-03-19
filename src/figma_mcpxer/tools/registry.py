@@ -46,10 +46,12 @@ def _load_all_tool_modules() -> None:
     Add new tool modules here as phases are implemented.
     """
     from figma_mcpxer.tools import codegen as _p6  # noqa: F401
+    from figma_mcpxer.tools import collaboration as _p7  # noqa: F401
     from figma_mcpxer.tools import components as _p4  # noqa: F401
     from figma_mcpxer.tools import file as _p2  # noqa: F401
     from figma_mcpxer.tools import layout as _p5  # noqa: F401
     from figma_mcpxer.tools import tokens as _p3  # noqa: F401
+    from figma_mcpxer.tools import webhooks as _p8  # noqa: F401
 
 
 _load_all_tool_modules()
