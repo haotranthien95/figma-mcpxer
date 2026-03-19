@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Purpose
 
-`figma-mcpxer` is a **remote MCP server** (hosted in Docker) that exposes the full Figma API as structured MCP tools. Any MCP-compatible client (Claude Desktop, Cursor, custom agents) can connect to it over HTTP/SSE and use it to read designs, extract tokens, inspect components, and generate pixel-accurate UI code that matches Figma exactly.
+`figma-mcpxer` is a **remote MCP server** (hosted in Docker) that exposes the full Figma API as structured MCP tools. Any MCP-compatible client (Claude Code, Claude Desktop, Cursor, custom agents) can connect to it over HTTP and use it to read designs, extract tokens, inspect components, and generate pixel-accurate UI code that matches Figma exactly.
 
 **We build only the server. Clients connect remotely — no stdio, no local install required by the client.**
 
@@ -23,9 +23,8 @@ Progress is tracked here. Mark `[x]` when a feature is complete and tested.
 - [x] `ruff`, `mypy`, `pytest` all pass in CI
 
 ### Phase 1 — Core MCP Infrastructure ✅
-- [x] HTTP + SSE transport running (not stdio) so remote clients can connect
-- [x] `GET /sse` endpoint for MCP client handshake
-- [x] `POST /messages` endpoint for MCP tool calls
+- [x] Streamable HTTP transport running (not stdio) so remote clients can connect
+- [x] `POST /mcp` single endpoint for MCP initialize, tool calls, and notifications
 - [x] `list_tools` returns all registered tools
 - [x] Auth middleware: clients pass `Authorization: Bearer <token>` or server-side `FIGMA_ACCESS_TOKEN` is injected automatically
 - [x] Structured error responses (MCP-compliant, not raw 500s)
@@ -119,31 +118,37 @@ tests/
 
 **Key design rules:**
 - `tools/` files define MCP tool schemas and delegate to `figma/client.py` — no HTTP calls anywhere else
-- `server.py` mounts MCP over SSE/HTTP (not stdio) so Docker-hosted server is reachable by remote clients
+- `server.py` mounts MCP over Streamable HTTP (not stdio) so Docker-hosted server is reachable by remote clients
 - All config via `config.py` — never `os.getenv()` scattered in code
 - MCP tool `inputSchema` must have `"additionalProperties": false`
 - Files < 300 lines; split by responsibility if longer
 - `utils/` functions are pure (no I/O, no side effects)
 
-## Transport: HTTP + SSE (not stdio)
+## Transport: Streamable HTTP (MCP spec 2025-03-26)
 
-The server uses `mcp` with Starlette/FastAPI SSE transport so any remote client can connect without installing anything locally:
+The server uses `StreamableHTTPSessionManager` from `mcp.server.streamable_http_manager`. This is the current MCP transport standard — the legacy SSE transport (`/sse` + `/messages/`) is deprecated and removed.
+
+A single `POST /mcp` endpoint handles all MCP interactions (initialize, tool calls, notifications). The response is streamed as SSE when the client sends `Accept: text/event-stream`, or returned as JSON otherwise.
 
 ```python
-# server.py — remote-capable transport
-from mcp.server.sse import SseServerTransport
+# server.py — Streamable HTTP transport
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from starlette.applications import Starlette
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 
-transport = SseServerTransport("/messages")
+session_manager = StreamableHTTPSessionManager(mcp_server)
 
-async def handle_sse(request):
-    async with transport.connect_sse(request.scope, request.receive, request._send) as streams:
-        await app.run(streams[0], streams[1], app.create_initialization_options())
+async def handle_mcp(request):
+    await session_manager.handle_request(request.scope, request.receive, request._send)
+    return Response()
 
-starlette_app = Starlette(routes=[
-    Route("/sse", endpoint=handle_sse),
-    Mount("/messages", app=transport.handle_post_message),
+@asynccontextmanager
+async def lifespan(app):
+    async with session_manager.run():
+        yield
+
+starlette_app = Starlette(lifespan=lifespan, routes=[
+    Route("/mcp", endpoint=handle_mcp, methods=["GET", "POST", "DELETE"]),
     Route("/health", endpoint=health_check),
 ])
 ```
@@ -153,7 +158,8 @@ starlette_app = Starlette(routes=[
 {
   "mcpServers": {
     "figma": {
-      "url": "http://localhost:8000/sse"
+      "type": "http",
+      "url": "http://localhost:8000/mcp"
     }
   }
 }

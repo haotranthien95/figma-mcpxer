@@ -44,7 +44,7 @@ Server starts at **http://localhost:8000**
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /health` | Liveness check |
-| `GET /sse` | MCP client connect here |
+| `POST /mcp` | MCP client endpoint (initialize, tool calls, notifications) |
 | `GET /metrics` | Prometheus metrics |
 | `POST /webhooks/figma` | Figma webhook receiver |
 
@@ -89,7 +89,9 @@ Production stack includes:
 
 ## Connect an MCP Client
 
-Once the server is running, point your MCP client at the SSE endpoint.
+Once the server is running, point your MCP client at `http://localhost:8000/mcp`.
+
+> **Transport note:** This server uses the **Streamable HTTP** transport introduced in MCP spec 2025-03-26. The old SSE endpoints (`/sse`, `/messages/`) have been removed. Use `http://localhost:8000/mcp` everywhere.
 
 ---
 
@@ -98,10 +100,10 @@ Once the server is running, point your MCP client at the SSE endpoint.
 **Add the server (one-time setup):**
 
 ```bash
-claude mcp add figma http://localhost:8000/sse
+claude mcp add --transport http figma http://localhost:8000/mcp
 ```
 
-That's it. Claude Code registers the server and all 28 Figma tools are available immediately in your next session.
+That's it. Claude Code registers the server and all Figma tools are available immediately in your next session.
 
 **Verify it was added:**
 
@@ -126,7 +128,7 @@ claude mcp remove figma
 If you set `MCP_AUTH_TOKEN` in `.env`, pass the header when adding:
 
 ```bash
-claude mcp add figma http://localhost:8000/sse \
+claude mcp add --transport http figma http://localhost:8000/mcp \
   --header "Authorization: Bearer <your-token>"
 ```
 
@@ -135,7 +137,7 @@ claude mcp add figma http://localhost:8000/sse \
 By default `claude mcp add` adds the server **globally** (available in all projects). To scope it to the current project only:
 
 ```bash
-claude mcp add figma http://localhost:8000/sse --scope project
+claude mcp add --transport http figma http://localhost:8000/mcp --scope project
 ```
 
 This writes to `.mcp.json` in your project root — commit it so teammates get the server automatically.
@@ -163,7 +165,8 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "figma": {
-      "url": "http://localhost:8000/sse"
+      "type": "http",
+      "url": "http://localhost:8000/mcp"
     }
   }
 }
@@ -173,7 +176,7 @@ Restart Claude Desktop. The Figma tools will appear automatically.
 
 ### Cursor / other clients
 
-Set the MCP server URL to `http://localhost:8000/sse` in your client's MCP settings.
+Set the MCP server URL to `http://localhost:8000/mcp` in your client's MCP settings. Select **HTTP** (not SSE) as the transport type if prompted.
 
 ---
 

@@ -1,11 +1,14 @@
-"""MCP server with HTTP + SSE transport.
+"""MCP server with Streamable HTTP transport (MCP spec 2025-03-26).
 
-Remote MCP clients (Claude Desktop, Cursor, custom agents) connect to:
-  GET  /sse            — open SSE stream for MCP handshake and server-push
-  POST /messages       — send MCP tool call messages
-  GET  /health         — liveness probe used by Docker and load balancers
+Remote MCP clients (Claude Code, Claude Desktop, Cursor, custom agents) connect to:
+  POST /mcp           — single MCP endpoint (initialize, tool calls, notifications)
+  GET  /health        — liveness probe used by Docker and load balancers
   POST /webhooks/figma — receive Figma FILE_UPDATE events (Phase 8)
   GET  /metrics        — Prometheus text metrics (Phase 9)
+
+The legacy SSE transport (/sse + /messages/) has been replaced by the
+Streamable HTTP transport which uses a single POST endpoint and supports
+both streaming SSE responses and plain JSON responses.
 """
 
 from __future__ import annotations
@@ -18,13 +21,13 @@ from typing import Any
 
 from mcp import types
 from mcp.server import Server
-from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import ValidationError
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
-from starlette.routing import Mount, Route
+from starlette.routing import Route
 
 from figma_mcpxer import metrics  # noqa: F401 — registers Prometheus metrics on import
 from figma_mcpxer.cache.store import CacheStore
@@ -99,37 +102,33 @@ def create_app(settings: Settings) -> Starlette:
     )
     cache_store = _create_cache(settings)
     mcp_server = _build_mcp_server(figma_client, cache_store)
-    transport = SseServerTransport("/messages/")
+    session_manager = StreamableHTTPSessionManager(mcp_server)
 
     @asynccontextmanager
     async def lifespan(_: Starlette) -> AsyncIterator[None]:
         logger.info("figma-mcpxer starting — %d tools registered", len(registry.get_all_tools()))
-        try:
-            yield
-        finally:
-            await figma_client.close()
-            logger.info("figma-mcpxer stopped")
+        async with session_manager.run():
+            try:
+                yield
+            finally:
+                await figma_client.close()
+                logger.info("figma-mcpxer stopped")
 
     # ------------------------------------------------------------------ #
     # Route handlers                                                        #
     # ------------------------------------------------------------------ #
 
-    async def handle_sse(request: Request) -> Response:
-        """SSE endpoint — MCP clients connect here first."""
+    async def handle_mcp(request: Request) -> Response:
+        """Single MCP endpoint — handles initialize, tool calls, notifications."""
         if settings.mcp_auth_token:
             auth = request.headers.get("authorization", "")
             if auth != f"Bearer {settings.mcp_auth_token}":
                 raise MCPAuthError()
 
-        async with transport.connect_sse(
+        await session_manager.handle_request(
             request.scope, request.receive, request._send  # type: ignore[attr-defined]
-        ) as streams:
-            await mcp_server.run(
-                streams[0],
-                streams[1],
-                mcp_server.create_initialization_options(),
-            )
-        return Response()  # unreachable — SSE stream never returns normally
+        )
+        return Response()  # response already sent via send
 
     async def health(_: Request) -> JSONResponse:
         tools = registry.get_all_tools()
@@ -172,10 +171,9 @@ def create_app(settings: Settings) -> Starlette:
         lifespan=lifespan,
         routes=[
             Route("/health", health),
-            Route("/sse", handle_sse),
+            Route("/mcp", handle_mcp, methods=["GET", "POST", "DELETE"]),
             Route("/webhooks/figma", handle_figma_webhook, methods=["POST"]),
             Route("/metrics", prometheus_metrics),
-            Mount("/messages/", app=transport.handle_post_message),
         ],
     )
 
