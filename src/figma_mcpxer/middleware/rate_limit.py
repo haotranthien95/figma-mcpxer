@@ -5,50 +5,51 @@ deployment. For multi-replica setups, replace with a Redis-backed limiter
 (e.g. slowapi + Redis backend) or an upstream proxy rate limit (nginx).
 
 Configuration: set RATE_LIMIT_RPS in the environment (0 = disabled).
+
+NOTE: Implemented as a pure ASGI middleware (not BaseHTTPMiddleware) so that
+SSE streaming connections are passed through without body-buffering interference.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections import deque
 from typing import Any
 
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-
 logger = logging.getLogger(__name__)
 
 
-class RateLimitMiddleware(BaseHTTPMiddleware):
+class RateLimitMiddleware:
     """Sliding-window rate limiter keyed by client IP.
 
     Tracks the timestamps of the last `max_rps` requests per IP.
     Rejects requests that would exceed the limit with HTTP 429.
+
+    Pure ASGI middleware — does NOT inherit BaseHTTPMiddleware so it is
+    compatible with long-lived SSE streaming responses.
     """
 
     def __init__(self, app: Any, *, max_rps: int = 60) -> None:
-        super().__init__(app)
+        self.app = app
         self._max_rps = max_rps
         # IP → deque of request timestamps (monotonic, in seconds)
         self._windows: dict[str, deque[float]] = {}
 
-    async def dispatch(self, request: Request, call_next: Any) -> Response:
-        if self._max_rps <= 0:
-            return await call_next(request)
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or self._max_rps <= 0:
+            await self.app(scope, receive, send)
+            return
 
-        client_ip = self._get_client_ip(request)
+        client_ip = self._get_client_ip(scope)
         if not self._allow(client_ip):
-            logger.warning("Rate limit exceeded for %s on %s", client_ip, request.url.path)
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "error": "rate_limit_exceeded",
-                    "detail": f"Maximum {self._max_rps} requests/second exceeded.",
-                },
-            )
-        return await call_next(request)
+            path = scope.get("path", "")
+            logger.warning("Rate limit exceeded for %s on %s", client_ip, path)
+            await self._send_429(send)
+            return
+
+        await self.app(scope, receive, send)
 
     def _allow(self, client_ip: str) -> bool:
         """Return True if the request is within the rate limit window."""
@@ -71,9 +72,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return True
 
     @staticmethod
-    def _get_client_ip(request: Request) -> str:
+    def _get_client_ip(scope: Any) -> str:
         """Extract client IP, respecting X-Forwarded-For from trusted proxies."""
-        forwarded = request.headers.get("x-forwarded-for")
+        headers = dict(scope.get("headers", []))
+        forwarded = headers.get(b"x-forwarded-for", b"").decode()
         if forwarded:
             return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+        client = scope.get("client")
+        return client[0] if client else "unknown"
+
+    @staticmethod
+    async def _send_429(send: Any) -> None:
+        body = json.dumps(
+            {
+                "error": "rate_limit_exceeded",
+                "detail": "Maximum requests/second exceeded.",
+            }
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
