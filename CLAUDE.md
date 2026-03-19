@@ -14,28 +14,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Progress is tracked here. Mark `[x]` when a feature is complete and tested.
 
-### Phase 0 — Project Bootstrap
-- [ ] `pyproject.toml` with all dependencies declared
-- [ ] `src/figma_mcpxer/` package skeleton created
-- [ ] `Dockerfile` + `docker-compose.yml` working (`docker-compose up` starts server)
-- [ ] `.env.example` committed
-- [ ] Health check endpoint responding at `GET /health`
-- [ ] `ruff`, `mypy`, `pytest` all pass in CI
+### Phase 0 — Project Bootstrap ✅
+- [x] `pyproject.toml` with all dependencies declared
+- [x] `src/figma_mcpxer/` package skeleton created
+- [x] `Dockerfile` + `docker-compose.yml` working (`docker-compose up` starts server)
+- [x] `.env.example` committed
+- [x] Health check endpoint responding at `GET /health`
+- [x] `ruff`, `mypy`, `pytest` all pass in CI
 
-### Phase 1 — Core MCP Infrastructure
-- [ ] HTTP + SSE transport running (not stdio) so remote clients can connect
-- [ ] `GET /sse` endpoint for MCP client handshake
-- [ ] `POST /messages` endpoint for MCP tool calls
-- [ ] `list_tools` returns all registered tools
-- [ ] Auth middleware: clients pass `Authorization: Bearer <token>` or server-side `FIGMA_ACCESS_TOKEN` is injected automatically
-- [ ] Structured error responses (MCP-compliant, not raw 500s)
+### Phase 1 — Core MCP Infrastructure ✅
+- [x] HTTP + SSE transport running (not stdio) so remote clients can connect
+- [x] `GET /sse` endpoint for MCP client handshake
+- [x] `POST /messages` endpoint for MCP tool calls
+- [x] `list_tools` returns all registered tools
+- [x] Auth middleware: clients pass `Authorization: Bearer <token>` or server-side `FIGMA_ACCESS_TOKEN` is injected automatically
+- [x] Structured error responses (MCP-compliant, not raw 500s)
 
-### Phase 2 — File & Node Tools
-- [ ] `figma_get_file` — full file tree (name, pages, nodes hierarchy)
-- [ ] `figma_get_node` — single node by ID with all properties
-- [ ] `figma_get_nodes` — batch fetch multiple nodes in one call
-- [ ] `figma_list_pages` — list pages in a file with node counts
-- [ ] `figma_search_nodes` — search nodes by name, type, or property value
+### Phase 2 — File & Node Tools ✅
+- [x] `figma_get_file` — full file tree (name, pages, nodes hierarchy)
+- [x] `figma_get_node` — single node by ID with all properties
+- [x] `figma_get_nodes` — batch fetch multiple nodes in one call
+- [x] `figma_list_pages` — list pages in a file with node counts
+- [x] `figma_search_nodes` — search nodes by name, type, or property value
 
 ### Phase 3 — Design Token Tools (required for pixel-accurate UI)
 - [ ] `figma_get_colors` — all color styles with hex, rgba, and usage context
