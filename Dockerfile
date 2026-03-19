@@ -6,6 +6,8 @@ WORKDIR /app
 RUN pip install --upgrade pip --quiet
 
 COPY pyproject.toml .
+# src/ must exist because setuptools reads it during wheel build
+COPY src/ ./src/
 # Install runtime deps only (no dev extras) into a target dir for clean copy
 RUN pip install --no-cache-dir "." --target /app/packages
 
