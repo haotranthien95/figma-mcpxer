@@ -91,6 +91,70 @@ Production stack includes:
 
 Once the server is running, point your MCP client at the SSE endpoint.
 
+---
+
+### Claude Code (CLI)
+
+**Add the server (one-time setup):**
+
+```bash
+claude mcp add figma http://localhost:8000/sse
+```
+
+That's it. Claude Code registers the server and all 28 Figma tools are available immediately in your next session.
+
+**Verify it was added:**
+
+```bash
+claude mcp list
+```
+
+**Test the connection:**
+
+```bash
+claude mcp get figma
+```
+
+**Remove it when no longer needed:**
+
+```bash
+claude mcp remove figma
+```
+
+#### With authentication
+
+If you set `MCP_AUTH_TOKEN` in `.env`, pass the header when adding:
+
+```bash
+claude mcp add figma http://localhost:8000/sse \
+  --header "Authorization: Bearer <your-token>"
+```
+
+#### Project-scoped vs global
+
+By default `claude mcp add` adds the server **globally** (available in all projects). To scope it to the current project only:
+
+```bash
+claude mcp add figma http://localhost:8000/sse --scope project
+```
+
+This writes to `.mcp.json` in your project root — commit it so teammates get the server automatically.
+
+#### Using the tools in a conversation
+
+Once connected, just describe what you want in plain English:
+
+```
+"Get all color tokens from my Figma file https://www.figma.com/design/ABC123/..."
+"Show me the auto-layout properties for node 1:23"
+"Export node 5:10 as an SVG"
+"List all components in this file"
+```
+
+Claude Code will call the appropriate Figma tools automatically.
+
+---
+
 ### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -110,14 +174,6 @@ Restart Claude Desktop. The Figma tools will appear automatically.
 ### Cursor / other clients
 
 Set the MCP server URL to `http://localhost:8000/sse` in your client's MCP settings.
-
-### With authentication
-
-Set `MCP_AUTH_TOKEN` in `.env`, then clients must send:
-
-```
-Authorization: Bearer <your-token>
-```
 
 ---
 
