@@ -38,31 +38,31 @@ Progress is tracked here. Mark `[x]` when a feature is complete and tested.
 - [x] `figma_search_nodes` — search nodes by name, type, or property value
 
 ### Phase 3 — Design Token Tools (required for pixel-accurate UI)
-- [ ] `figma_get_colors` — all color styles with hex, rgba, and usage context
-- [ ] `figma_get_typography` — all text styles (font family, size, weight, line-height, letter-spacing)
-- [ ] `figma_get_spacing` — spacing/padding/gap values extracted from auto-layout nodes
-- [ ] `figma_get_effects` — shadows, blurs, and overlays as CSS-ready values
-- [ ] `figma_get_variables` — Figma Variables (collections, modes, resolved values)
-- [ ] `figma_get_grids` — layout grids (columns, rows, gutters)
+- [x] `figma_get_colors` — all color styles with hex, rgba, and usage context
+- [x] `figma_get_typography` — all text styles (font family, size, weight, line-height, letter-spacing)
+- [x] `figma_get_spacing` — spacing/padding/gap values extracted from auto-layout nodes
+- [x] `figma_get_effects` — shadows, blurs, and overlays as CSS-ready values
+- [x] `figma_get_variables` — Figma Variables (collections, modes, resolved values)
+- [x] `figma_get_grids` — layout grids (columns, rows, gutters)
 
 ### Phase 4 — Component & Asset Tools
-- [ ] `figma_get_components` — all local components with props and variants
-- [ ] `figma_get_component_sets` — component sets and their variant properties
-- [ ] `figma_get_styles` — all published styles (fill, stroke, text, effect, grid)
-- [ ] `figma_export_image` — export a node as PNG/SVG/PDF at specified scale
-- [ ] `figma_export_images` — batch export multiple nodes
-- [ ] `figma_get_images` — resolve image fill references to URLs
+- [x] `figma_get_components` — all local components with props and variants
+- [x] `figma_get_component_sets` — component sets and their variant properties
+- [x] `figma_get_styles` — all published styles (fill, stroke, text, effect, grid)
+- [x] `figma_export_image` — export a node as PNG/SVG/PDF at specified scale
+- [x] `figma_export_images` — batch export multiple nodes
+- [x] `figma_get_images` — resolve image fill references to URLs
 
 ### Phase 5 — Layout & Structure Tools (for accurate CSS generation)
-- [ ] `figma_get_auto_layout` — auto-layout properties per node (direction, gap, padding, alignment, sizing mode)
-- [ ] `figma_get_constraints` — node constraints (horizontal/vertical) for responsive behaviour
-- [ ] `figma_get_absolute_bounds` — absolute x/y/width/height for every node
-- [ ] `figma_get_fills` — all fill types (solid, gradient, image) with positions and opacity
+- [x] `figma_get_auto_layout` — auto-layout properties per node (direction, gap, padding, alignment, sizing mode)
+- [x] `figma_get_constraints` — node constraints (horizontal/vertical) for responsive behaviour
+- [x] `figma_get_absolute_bounds` — absolute x/y/width/height for every node
+- [x] `figma_get_fills` — all fill types (solid, gradient, image) with positions and opacity
 
 ### Phase 6 — Code Generation Hint Tools
-- [ ] `figma_get_css` — CSS properties for a node computed by Figma (uses Figma's own CSS export)
-- [ ] `figma_describe_component` — structured description of a component: slots, variants, required props, design intent
-- [ ] `figma_get_design_tokens_json` — full design token export in W3C Design Token format
+- [x] `figma_get_css` — CSS properties for a node computed by Figma (uses Figma's own CSS export)
+- [x] `figma_describe_component` — structured description of a component: slots, variants, required props, design intent
+- [x] `figma_get_design_tokens_json` — full design token export in W3C Design Token format
 
 ### Phase 7 — Collaboration & Metadata Tools
 - [ ] `figma_get_comments` — all comments on a file or node

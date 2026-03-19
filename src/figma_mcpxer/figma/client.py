@@ -77,6 +77,45 @@ class FigmaClient:
         _raise_for_figma_error(response)
         return response.json()  # type: ignore[no-any-return]
 
+    async def get_local_variables(self, file_key: str) -> dict[str, Any]:
+        """Fetch Figma Variables defined in the file (requires Figma Professional+)."""
+        logger.debug("GET /files/%s/variables/local", file_key)
+        response = await self._http.get(f"/files/{file_key}/variables/local")
+        _raise_for_figma_error(response)
+        return response.json()  # type: ignore[no-any-return]
+
+    async def export_images(
+        self,
+        file_key: str,
+        node_ids: list[str],
+        *,
+        format: str = "png",
+        scale: float = 1.0,
+        use_absolute_bounds: bool = False,
+    ) -> dict[str, Any]:
+        """Render nodes as images. Returns {node_id: image_url | null}.
+
+        Endpoint is /images/{file_key}, not /files/{file_key}/images.
+        """
+        params: dict[str, Any] = {
+            "ids": ",".join(node_ids),
+            "format": format,
+            "scale": scale,
+        }
+        if use_absolute_bounds:
+            params["use_absolute_bounds"] = "true"
+        logger.debug("GET /images/%s format=%s ids=%s", file_key, format, node_ids)
+        response = await self._http.get(f"/images/{file_key}", params=params)
+        _raise_for_figma_error(response)
+        return response.json()  # type: ignore[no-any-return]
+
+    async def get_file_image_fills(self, file_key: str) -> dict[str, Any]:
+        """Fetch CDN URLs for all image fill references in the file."""
+        logger.debug("GET /files/%s/images", file_key)
+        response = await self._http.get(f"/files/{file_key}/images")
+        _raise_for_figma_error(response)
+        return response.json()  # type: ignore[no-any-return]
+
     async def close(self) -> None:
         await self._http.aclose()
 
